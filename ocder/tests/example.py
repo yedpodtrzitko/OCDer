@@ -1,6 +1,3 @@
-class Foo(object):
-    pass
-
 {
     'complain': 1
 
@@ -38,26 +35,6 @@ class Foo(object):
     # commment
 }
 
-{
-    'ok': [],
-}
-
-{
-    'ok': list,
-}
-
-{
-    'ok': lambda: 1,
-}
-
-{
-    'ok': Foo(),
-}
-
-{
-    'ok': Foo,
-}
-
 {'ok': 5}
 
 {'ok'}
@@ -78,3 +55,17 @@ class Foo(object):
     'complain',
     'complain'
 )
+
+{
+    # valid
+}
+
+{
+
+}
+
+(
+    1, 2
+), {
+    3: 4
+}
