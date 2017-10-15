@@ -100,20 +100,20 @@ def ocd_check(pth, fix=False):
     for node in ast.walk(atok._tree):
         if isinstance(node, (ast.Dict, ast.List, ast.Tuple, ast.Set)):
             tokens = list(atok.get_tokens(node, include_extra=True))[::-1]
-            if not check_node(tokens, changeset):
+            if not check_node(tokens, changeset, node.__class__):
                 if not fix:
                     log.error('OCD node:\n{}, line {}\n{}\n'.format(pth, node.lineno, atok.get_text(node)))
                 else:
                     log.info('fixing {}'.format(pth))
 
-    print('fix changeset', fix, changeset)
     if fix and changeset:
+        log.debug('fixing changeset: {}'.format(changeset))
         source_text = util.replace(source_text, [(change, change, ',') for change in changeset])
         with codecs.open('%s' % pth, 'wb', encoding='utf-8') as f:
             f.write(header + source_text)
 
 
-def check_node(tokens, changes):
+def check_node(tokens, changes, node_type):
     """
     Check if AST node is properly trailed by comma.
     Only multiline collections are checked.
@@ -124,13 +124,17 @@ def check_node(tokens, changes):
     - if no content is found, comma not required
     - if comma isn't found before any content token, comma required
 
+    - tuples are special somehow, closing bracket is not included in tokens
+
+    :param node: AST node being checked
     :param tokens: tokens contained in AST node
+    :param changes: collecting set of changes to be fixed
     :return: true if node is comma-trailed properly
     """
-    index = 0
+    index = int(node_type is not ast.Tuple)
     valid = False
     multiline = False
-    found_content = False
+    content_index = None
 
     last_index = len(tokens) - 1
 
@@ -150,14 +154,12 @@ def check_node(tokens, changes):
             log.debug('node is newline')
             multiline = True
             index += 1
-            print(11)
             continue
 
         # comment, move one token further
         if pointed.type == token.N_TOKENS and pointed.string.startswith('#'):
             log.debug('node is comment')
             index += 1
-            print(12)
             continue
 
         # we got comma before anything else, valid
@@ -167,11 +169,14 @@ def check_node(tokens, changes):
             break
 
         if not valid and multiline:
-            log.debug('node is not anything above, error and oout')
+            log.debug('content node, multiple lines')
+            if content_index is None:
+                content_index = index
             break
         else:
             log.debug('found a node before comma, probably not valid')
-            found_content = True
+            if content_index is None:
+                content_index = index
             index += 1
             # we dont know if it's multiline yet
             continue
@@ -179,7 +184,9 @@ def check_node(tokens, changes):
     if not multiline:
         return True
 
-    valid = not found_content and valid
+    valid = content_index is None and valid
     if not valid:
-        changes.add(tokens[0].endpos)
+        if content_index is None:
+            content_index = index
+        changes.add(tokens[content_index].endpos)
     return valid
