@@ -1,41 +1,50 @@
 from __future__ import print_function
 
-import logging
 import ast
 import codecs
-from functools import partial
+import logging
+import os
 import token
+from functools import partial
+from multiprocessing import Pool
 
 from asttokens import asttokens, util
-import os
-
-from multiprocessing import Pool
 
 logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.WARNING)
 
-import signal
-
 log = logging.getLogger(__name__)
 
+verbosity = {
+    0: logging.WARNING,
+    1: logging.INFO,
+    2: logging.DEBUG,
+}
 
-def initializer():
-    """Ignore CTRL+C in the worker process -> working Ctrl+C"""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+def check_target(pth, fix=False, jobs=1, verbose=0):
+    """
+    Main function performing check on chosen path.
 
-def check_target(pth, fix=False, jobs=1, verbose=False):
-    if verbose:
-        log.setLevel(logging.INFO)
+    :param pth: target file/directory to check
+    :param fix: check-only or fix
+    :param jobs: number of workers
+    :param verbose: show extra information
+    """
+    log.setLevel(verbosity.get(min(max(verbose, 0), 2)))
 
     log.info('collecting files')
     targets = collect_targets(pth)
 
     log.info('starting check; workers: {}'.format(jobs))
-    pool = Pool(jobs, initializer=initializer)
+    pool = Pool(jobs)
+    # .get(9999999) fixes workers capturing Ctrl+C
     pool.map_async(partial(check_file, fix), targets).get(9999999)
 
 
 def collect_targets(pth):
+    """
+    Collect and return all files in chosen path.
+    """
     targets = []
     if os.path.isdir(pth):
         for root, dirs, files in os.walk(pth):
@@ -54,6 +63,9 @@ def collect_targets(pth):
 
 
 def check_file(fix, pth):
+    """
+    OCD-check a single file.
+    """
     try:
         ocd_check(pth, fix)
     except Exception as e:
@@ -61,6 +73,14 @@ def check_file(fix, pth):
 
 
 def ocd_check(pth, fix=False):
+    """
+    Perform OCD-check on a single file.
+
+    File is expected to be utf-8.
+
+    :param pth: filepath to be checked.
+    :param fix: if false, file won't be modified, only report the issues.
+    """
     log.info('checking {}'.format(pth))
     with codecs.open(pth, encoding='utf-8') as f:
         lines = f.readlines()
@@ -74,69 +94,92 @@ def ocd_check(pth, fix=False):
         lines = lines[1:]
 
     source_text = u''.join(lines)
-    file_valid = True
     atok = asttokens.ASTTokens(source_text, parse=True)
     changeset = set()
 
     for node in ast.walk(atok._tree):
         if isinstance(node, (ast.Dict, ast.List, ast.Tuple, ast.Set)):
             tokens = list(atok.get_tokens(node, include_extra=True))[::-1]
-            file_valid, changes = check_token(tokens, fix)
-            if not fix and not file_valid:
-                log.error('OCD node:\n{}, line {}\n{}\n'.format(pth, node.lineno, atok.get_text(node)))
-            elif fix and not file_valid:
-                log.info('fixing {}'.format(pth))
-                changeset.update(changes)
+            if not check_node(tokens, changeset):
+                if not fix:
+                    log.error('OCD node:\n{}, line {}\n{}\n'.format(pth, node.lineno, atok.get_text(node)))
+                else:
+                    log.info('fixing {}'.format(pth))
 
-    if fix and not file_valid:
-        source_text = util.replace(source_text, changeset)
+    print('fix changeset', fix, changeset)
+    if fix and changeset:
+        source_text = util.replace(source_text, [(change, change, ',') for change in changeset])
         with codecs.open('%s' % pth, 'wb', encoding='utf-8') as f:
             f.write(header + source_text)
 
 
-def check_token(tokens, fix=False):
+def check_node(tokens, changes):
     """
-    - walk nodes in reverse order until
-    - if comma is found in the meantime until
+    Check if AST node is properly trailed by comma.
+    Only multiline collections are checked.
+
+    Approach:
+    - walk tokens in AST node in reversal order
+    - if no newline is found, comma not required
+    - if no content is found, comma not required
+    - if comma isn't found before any content token, comma required
+
+    :param tokens: tokens contained in AST node
+    :return: true if node is comma-trailed properly
     """
-    index = 1
+    index = 0
     valid = False
     multiline = False
-    changes = []
+    found_content = False
 
     last_index = len(tokens) - 1
 
     while True:
         pointed = tokens[index]
+
+        log.debug('pointed node: {}'.format(pointed))
+
+        # first node reached, could be empty
+        if index == last_index:
+            log.debug('node is very last')
+            valid = True
+            break
+
         # newline, move one token further
         if pointed.type == 54 and '\n' in pointed.string:
+            log.debug('node is newline')
             multiline = True
             index += 1
+            print(11)
             continue
 
         # comment, move one token further
         if pointed.type == token.N_TOKENS and pointed.string.startswith('#'):
+            log.debug('node is comment')
             index += 1
+            print(12)
             continue
 
         # we got comma before anything else, valid
         if pointed.type == token.OP and pointed.string == ',':
+            log.debug('node is comma')
             valid = True
             break
 
-        # it's empty, dont do anything
-        if index == last_index:
-            valid = True
+        if not valid and multiline:
+            log.debug('node is not anything above, error and oout')
             break
-
-        if not valid and multiline and fix:
-            changes.append(
-                (pointed.endpos, pointed.endpos, ','),
-            )
-            break
-
-        break
+        else:
+            log.debug('found a node before comma, probably not valid')
+            found_content = True
+            index += 1
+            # we dont know if it's multiline yet
+            continue
 
     if not multiline:
-        return True, []
-    return valid, changes
+        return True
+
+    valid = not found_content and valid
+    if not valid:
+        changes.add(tokens[0].endpos)
+    return valid
