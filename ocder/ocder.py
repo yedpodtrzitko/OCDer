@@ -34,10 +34,12 @@ def check_target(pth, fix=False, jobs=1, verbose=0):
 
     log.info('collecting files')
     targets = collect_targets(pth)
+    log.info('files collected: {}'.format(len(targets)))
 
-    log.info('starting check; workers: {}'.format(jobs))
     pool = Pool(jobs)
-    # .get(9999999) fixes workers capturing Ctrl+C
+
+    log.info('starting check, workers:'.format(jobs))
+    # .get(9999999) fixes workers capturing KeyboardInterrupt
     pool.map_async(partial(check_file, fix), targets).get(9999999)
 
 
