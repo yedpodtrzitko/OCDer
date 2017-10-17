@@ -1,9 +1,6 @@
-import ast
-
-from asttokens import asttokens
 import pytest
 
-from ocder.ocder import check_node, fix_source
+from ocder.ocder import check_content
 
 bad_nodes = [(
     '''{
@@ -54,28 +51,24 @@ bad_nodes = [(
         'complain',
     )''',
 ), (
-    '''{
+    '''(
         1, 2
-    }, {
+    ), {
         3: 4
     }''',
-    '''{
+    '''(
         1, 2
-    }, {
+    ), {
         3: 4,
-    }''',
+    },''',
 )]
-
 
 
 @pytest.mark.parametrize(['input_node', 'expected'], bad_nodes)
 def test_bad_node(input_node, expected):
-    atok = asttokens.ASTTokens(input_node, parse=True)
-    node = atok._tree
-    tokens = list(atok.get_tokens(node, include_extra=True))[::-1]
-    changeset = set()
-    assert not check_node(tokens, changeset, node.__class__)
-    assert fix_source(input_node, changeset) == expected
+    valid, fixed_source = check_content(input_node, True)
+    assert not valid
+    assert fixed_source == expected
 
 
 good_nodes = [
@@ -111,16 +104,11 @@ good_nodes = [
             1, 2
         ), {
             3: 4,
-        }''',
+        },''',
     ),
 ]
 
 
 @pytest.mark.parametrize(['input_node'], good_nodes)
 def test_good_node(input_node):
-    atok = asttokens.ASTTokens(input_node, parse=True)
-    node = atok._tree
-    tokens = list(atok.get_tokens(node, include_extra=True))[::-1]
-    changeset = set()
-    assert check_node(tokens, changeset, node.__class__)
-    assert not changeset
+    assert check_content(input_node, True)[0]

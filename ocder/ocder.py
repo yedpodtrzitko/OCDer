@@ -67,6 +67,8 @@ def collect_targets(pth):
 def check_file(fix, pth):
     """
     OCD-check a single file.
+
+    File is expected to be utf-8.
     """
     log.info('checking {}'.format(pth))
     with codecs.open(pth, encoding='utf-8') as f:
@@ -83,18 +85,21 @@ def check_file(fix, pth):
     source_text = u''.join(lines)
 
     try:
-        check_content(header, source_text, fix)
+        valid, source_text = check_content(source_text, fix)
     except Exception as e:
         log.error('skipping {}\n - {}'.format(pth, e))
+    else:
+        if not valid:
+            log.info('fixing {}'.format(pth))
+            with codecs.open('%s' % pth, 'wb', encoding='utf-8') as f:
+                f.write(header + source_text)
 
 
-def check_content(header, source_text, fix=False):
+def check_content(source_text, fix=False):
     """
     Perform OCD-check on a single file.
 
-    File is expected to be utf-8.
-
-    :param pth: filepath to be checked.
+    :param source_text: source to be checked.
     :param fix: if false, file won't be modified, only report the issues.
     """
     atok = asttokens.ASTTokens(source_text, parse=True)
@@ -105,22 +110,11 @@ def check_content(header, source_text, fix=False):
             tokens = list(atok.get_tokens(node, include_extra=True))[::-1]
             if not check_node(tokens, changeset, node.__class__):
                 if not fix:
-                    log.error('OCD node:\n{}, line {}\n{}\n'.format(pth, node.lineno, atok.get_text(node)))
-                else:
-                    log.info('fixing {}'.format(pth))
+                    log.error('OCD node:, line {}\n{}\n'.format(node.lineno, atok.get_text(node)))
 
     if fix and changeset:
-        fixed_source = fix_source(source_text, changeset)
-        with codecs.open('%s' % pth, 'wb', encoding='utf-8') as f:
-            f.write(header + fixed_source)
-
-
-def fix_source(source_text, changeset):
-    """
-    Fix source text by using supplied changeset (offsets where to append commas)
-    """
-    log.debug('fixing changeset: {}'.format(changeset))
-    return util.replace(source_text, [(change, change, ',') for change in changeset])
+        return False, util.replace(source_text, [(change, change, ',') for change in changeset])
+    return True, source_text
 
 
 def check_node(tokens, changes, node_type):
