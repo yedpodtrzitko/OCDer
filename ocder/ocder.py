@@ -68,21 +68,6 @@ def check_file(fix, pth):
     """
     OCD-check a single file.
     """
-    try:
-        ocd_check(pth, fix)
-    except Exception as e:
-        log.error('skipping {}\n - {}'.format(pth, e))
-
-
-def ocd_check(pth, fix=False):
-    """
-    Perform OCD-check on a single file.
-
-    File is expected to be utf-8.
-
-    :param pth: filepath to be checked.
-    :param fix: if false, file won't be modified, only report the issues.
-    """
     log.info('checking {}'.format(pth))
     with codecs.open(pth, encoding='utf-8') as f:
         lines = f.readlines()
@@ -96,6 +81,22 @@ def ocd_check(pth, fix=False):
         lines = lines[1:]
 
     source_text = u''.join(lines)
+
+    try:
+        check_content(header, source_text, fix)
+    except Exception as e:
+        log.error('skipping {}\n - {}'.format(pth, e))
+
+
+def check_content(header, source_text, fix=False):
+    """
+    Perform OCD-check on a single file.
+
+    File is expected to be utf-8.
+
+    :param pth: filepath to be checked.
+    :param fix: if false, file won't be modified, only report the issues.
+    """
     atok = asttokens.ASTTokens(source_text, parse=True)
     changeset = set()
 
@@ -109,10 +110,17 @@ def ocd_check(pth, fix=False):
                     log.info('fixing {}'.format(pth))
 
     if fix and changeset:
-        log.debug('fixing changeset: {}'.format(changeset))
-        source_text = util.replace(source_text, [(change, change, ',') for change in changeset])
+        fixed_source = fix_source(source_text, changeset)
         with codecs.open('%s' % pth, 'wb', encoding='utf-8') as f:
-            f.write(header + source_text)
+            f.write(header + fixed_source)
+
+
+def fix_source(source_text, changeset):
+    """
+    Fix source text by using supplied changeset (offsets where to append commas)
+    """
+    log.debug('fixing changeset: {}'.format(changeset))
+    return util.replace(source_text, [(change, change, ',') for change in changeset])
 
 
 def check_node(tokens, changes, node_type):
@@ -173,11 +181,13 @@ def check_node(tokens, changes, node_type):
         if not valid and multiline:
             log.debug('content node, multiple lines')
             if content_index is None:
+                log.debug('setting content node index: {}'.format(index))
                 content_index = index
             break
         else:
             log.debug('found a node before comma, probably not valid')
             if content_index is None:
+                log.debug('setting content node index: {}'.format(index))
                 content_index = index
             index += 1
             # we dont know if it's multiline yet
