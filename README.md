@@ -1,6 +1,6 @@
 # OCDer
 
-- OCDer is Python utility to check if multiline collections (dicts, lists...)
+OCDer is Python utility to check if multiline collections (dicts, lists...)
 have a trailing comma after their last element.
 
 
@@ -70,5 +70,4 @@ INFO: fixing ./my/codebase/schemas.py
 
 # TODO
 
-- run tests via pytest
 - add CI check
