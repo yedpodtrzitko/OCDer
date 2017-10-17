@@ -20,6 +20,8 @@ verbosity = {
     2: logging.DEBUG,
 }
 
+CHECK_NODES = (ast.Dict, ast.List, ast.Tuple, ast.Set)
+
 
 def check_target(pth, fix=False, jobs=1, verbose=0):
     """
@@ -40,7 +42,8 @@ def check_target(pth, fix=False, jobs=1, verbose=0):
 
     log.info('starting check, workers:'.format(jobs))
     # .get(9999999) fixes workers capturing KeyboardInterrupt
-    pool.map_async(partial(check_file, fix), targets).get(9999999)
+    res = pool.map_async(partial(check_file, fix), targets).get(9999999)
+    return all(res)
 
 
 def collect_targets(pth):
@@ -59,7 +62,7 @@ def collect_targets(pth):
         if pth.endswith('.py'):
             targets.append(pth)
     else:
-        raise ValueError('unknown target: {}'.format(pth))
+        raise ValueError('invalid target: {}'.format(pth))
 
     return targets
 
@@ -75,7 +78,7 @@ def check_file(fix, pth):
         lines = f.readlines()
 
     if not lines:
-        return
+        return True
 
     header = ''
     if '# -*- coding:' in lines[0]:
@@ -88,11 +91,14 @@ def check_file(fix, pth):
         valid, source_text = check_content(source_text, fix)
     except Exception as e:
         log.error('skipping {}\n - {}'.format(pth, e))
-    else:
-        if not valid:
-            log.info('fixing {}'.format(pth))
-            with codecs.open('%s' % pth, 'wb', encoding='utf-8') as f:
-                f.write(header + source_text)
+        return True
+
+    if not valid and fix:
+        log.info('fixing {}'.format(pth))
+        with codecs.open(pth, 'wb', encoding='utf-8') as f:
+            f.write(header + source_text)
+
+    return valid
 
 
 def check_content(source_text, fix=False):
@@ -106,15 +112,14 @@ def check_content(source_text, fix=False):
     changeset = set()
 
     for node in ast.walk(atok._tree):
-        if isinstance(node, (ast.Dict, ast.List, ast.Tuple, ast.Set)):
+        if isinstance(node, CHECK_NODES):
             tokens = list(atok.get_tokens(node, include_extra=True))[::-1]
             if not check_node(tokens, changeset, node.__class__):
                 if not fix:
                     log.error('OCD node:, line {}\n{}\n'.format(node.lineno, atok.get_text(node)))
-
     if fix and changeset:
         return False, util.replace(source_text, [(change, change, ',') for change in changeset])
-    return True, source_text
+    return not len(changeset), source_text
 
 
 def check_node(tokens, changes, node_type):

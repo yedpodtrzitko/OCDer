@@ -1,6 +1,10 @@
+# -*- coding: utf-8 -*-
+
 import pytest
 
-from ocder.ocder import check_content
+from os import path
+
+from ocder import ocder
 
 bad_nodes = [(
     '''{
@@ -61,12 +65,20 @@ bad_nodes = [(
     ), {
         3: 4,
     },''',
-)]
+), (
+    '''"€" or {
+        'complain': {}
+    }''',
+    '''"€" or {
+        'complain': {},
+    }''',
+),
+]
 
 
 @pytest.mark.parametrize(['input_node', 'expected'], bad_nodes)
 def test_bad_node(input_node, expected):
-    valid, fixed_source = check_content(input_node, True)
+    valid, fixed_source = ocder.check_content(input_node, True)
     assert not valid
     assert fixed_source == expected
 
@@ -111,4 +123,10 @@ good_nodes = [
 
 @pytest.mark.parametrize(['input_node'], good_nodes)
 def test_good_node(input_node):
-    assert check_content(input_node, True)[0]
+    assert ocder.check_content(input_node, True)[0]
+
+
+def test_open_unicode_file():
+    pth = path.abspath(path.dirname(__file__))
+    filepath = path.join(pth, 'unicode.py')
+    ocder.check_file(False, filepath)
