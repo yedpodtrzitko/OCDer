@@ -34,6 +34,9 @@ ERROR: OCD node:
 
 ### Fixing Mode
 
+**Always have a backup before running fixing mode!**
+
+
 To fix non-trailed collection in files, you can use flag `--fix`:
 
 ```
