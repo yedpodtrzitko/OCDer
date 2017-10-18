@@ -74,8 +74,12 @@ def check_file(fix, pth):
     File is expected to be utf-8.
     """
     log.info('checking {}'.format(pth))
-    with codecs.open(pth, encoding='utf-8') as f:
-        lines = f.readlines()
+    try:
+        with codecs.open(pth, encoding='utf-8') as f:
+            lines = f.readlines()
+    except Exception as e:
+        log.error('skipping {}\n - {}'.format(pth, e))
+        return True
 
     if not lines:
         return True

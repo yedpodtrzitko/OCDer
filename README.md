@@ -69,6 +69,9 @@ INFO: checking ./my/codebase/schemas.py
 INFO: fixing ./my/codebase/schemas.py
 ```
 
+## Known Limitations
+
+For now OCDer expects files to have utf-8 encoding. It may or may not work otherwise.
 
 
 # TODO
