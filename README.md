@@ -6,13 +6,13 @@ have a trailing comma after their last element.
 
 ## Quick Start
 
-OCDer can be installed directly from Github
+OCDer can be installed from PyPi
 
 ```
-$ pip install git+git://github.com/yedpodtrzitko/ocder.git
+$ pip install ocder
 ```
 
-Now you can run OCDer to check your code for missing trailing commas
+Now you can run it to check your code for missing trailing commas
 
 ```
 $ ocder ./my/codebase
