@@ -73,6 +73,10 @@ INFO: fixing ./my/codebase/schemas.py
 
 For now OCDer expects files to have utf-8 encoding. It may or may not work otherwise.
 
+# License
+
+OCDer is licensed under the terms of the MIT License (see the file LICENSE).
+
 
 # TODO
 
